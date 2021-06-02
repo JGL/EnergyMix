@@ -9,35 +9,46 @@ xmlObj = untangle.parse('https://api.bmreports.com/BMRS/FUELINSTHHCUR/v1?APIKey=
 #         print(fuelType)
 #         print(currentMW)
 #         
-gasMW = xmlObj.response.responseBody.responseList.item[0].currentMW.cdata
+gasMW = float(xmlObj.response.responseBody.responseList.item[0].currentMW.cdata)
 gasDescriptor = xmlObj.response.responseBody.responseList.item[0].fuelType.cdata
+
+coalMW = float(xmlObj.response.responseBody.responseList.item[3].currentMW.cdata)
+coalDescriptor = xmlObj.response.responseBody.responseList.item[3].fuelType.cdata
+
+nuclearMW = float(xmlObj.response.responseBody.responseList.item[4].currentMW.cdata)
+nuclearDescriptor = xmlObj.response.responseBody.responseList.item[4].fuelType.cdata
+
+windMW = float(xmlObj.response.responseBody.responseList.item[5].currentMW.cdata)
+windDescriptor = xmlObj.response.responseBody.responseList.item[5].fuelType.cdata
+
+pumpedStorageHydroMW = float(xmlObj.response.responseBody.responseList.item[6].currentMW.cdata)
+pumpedStorageHydroDescriptor = xmlObj.response.responseBody.responseList.item[6].fuelType.cdata
+
+nonPumpedHydroMW = float(xmlObj.response.responseBody.responseList.item[7].currentMW.cdata)
+nonPumpedHydroDescriptor = xmlObj.response.responseBody.responseList.item[7].fuelType.cdata
+
+totalHydro = pumpedStorageHydroMW + nonPumpedHydroMW
+
+biomassMW = float(xmlObj.response.responseBody.responseList.item[13].currentMW.cdata)
+biomassDescriptor = xmlObj.response.responseBody.responseList.item[13].fuelType.cdata
+
+timeLastUpdated = xmlObj.response.responseBody.dataLastUpdated.cdata
 
 print(gasDescriptor)
 print(gasMW)
-
-# using https://www.foxinfotech.in/2019/04/python-how-to-read-xml-from-url.html
-
-# from urllib.request import urlopen
-# from xml.etree.ElementTree import parse
-# 
-# var_url = urlopen('https://api.bmreports.com/BMRS/FUELINSTHHCUR/v1?APIKey=po7f83ilmq2p223&ServiceType=XML')
-# xmldoc = parse(var_url)
-# 
-# root = xmldoc.getroot()
-# 
-# # for child in root:
-# #     print(child.tag, child.attrib)
-# # Lists:
-# # responseMetadata {}
-# # responseHeader {}
-# # responseBody {}
-#     
-# #this seems to not work, but not sure if because of rate limits
-# # for x in root.findall('item'):
-# #     fuelType = x.find('fuelType').text
-# #     currentMW = x.find('currentMW').text
-# #     print(fuelType, currentMW)
-# 
-# for elem in root.iterfind('response/responseBody/responseList/item'):
-#     print(elem.tag)
-#     print(elem.attrib)
+print(coalDescriptor)
+print(coalMW)
+print(nuclearDescriptor)
+print(nuclearMW)
+print(windDescriptor)
+print(windMW)
+print(pumpedStorageHydroDescriptor)
+print(pumpedStorageHydroMW)
+print(nonPumpedHydroDescriptor)
+print(nonPumpedHydroMW)
+print("Total hydro:")
+print(totalHydro)
+print(biomassDescriptor)
+print(biomassMW)
+print("Time last updated:")
+print(timeLastUpdated)
