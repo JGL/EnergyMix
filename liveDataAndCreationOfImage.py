@@ -67,15 +67,17 @@ inkyBlueAsRGBTuple = (30, 29, 174)
 inkyRedAsRGBTuple = (205, 36, 37)
 inkyYellowAsRGBTuple = (231, 222, 35)
 inkyOrangeAsRGBTuple = (216, 123, 36)
-energyPalette = [inkyYellowAsRGBTuple, inkyOrangeAsRGBTuple, inkyBlackAsRGBTuple, inkyGreenAsRGBTuple, inkyWhiteAsRGBTuple, inkyBlueAsRGBTuple, inkyRedAsRGBTuple]
+energyPalette = [inkyYellowAsRGBTuple, inkyOrangeAsRGBTuple, inkyBlackAsRGBTuple, inkyRedAsRGBTuple, inkyWhiteAsRGBTuple, inkyBlueAsRGBTuple, inkyGreenAsRGBTuple]
 energyDescriptors = ['Solar', 'Gas', 'Coal', 'Nuclear', 'Wind', 'Hydro', 'Biomass']
 energyUsages = [solarMW, gasMW, coalMW, nuclearMW, windMW, hydroMW, biomassMW]
+
+print("Energy palette:",energyPalette, "\nEnergy descriptors:", energyDescriptors, "\nEnergy usages", energyUsages)
 
 totalEnergyUsage = 0.0
 for currentEnergy in energyUsages:
     totalEnergyUsage = totalEnergyUsage + currentEnergy
     
-print(totalEnergyUsage)
+print("Total energy: ", totalEnergyUsage)
 
 heightsInPixels = []
 for currentEnergy in energyUsages:
@@ -108,5 +110,6 @@ for barHeight in heightsInPixels:
 
 saturation = 0.66
 inky.set_image(generatedImage, saturation=saturation)
+inky.set_border(inky.BLACK)
 inky.show()
 
