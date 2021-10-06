@@ -13,10 +13,15 @@ try:
 except ImportError:
     raise RuntimeError("Cannot find ppwhttp. Have you copied ppwhttp.py to your Pico?")
  
+try:
+    from secrets import XML_ENERGY_EXCEPT_SOLAR_REQUEST_PATH
+except ImportError:
+    XML_ENERGY_EXCEPT_SOLAR_REQUEST_PATH = None
+
 """
-This uses the Plasma WS2812 LED library to drive a string of LEDs alongside the built-in RGB LED.
+EnergyMix uses the Plasma WS2812 LED library to drive a string of LEDs alongside the built-in RGB LED.
 You should wire your LEDs to VBUS/GND and connect the data pin to pin 27 (unused by Pico Wireless).
-See https://github.com/pimoroni/pimoroni-pico/tree/main/micropython/modules/plasma for the API
+See https://github.com/pimoroni/pimoroni-pico/tree/main/micropython/modules/plasma for the API for the Plasma WS2812 LED library
 """
 NUM_LEDS = 96  # Number of connected LEDs
 LED_PIN = 27   # LED data pin (27 is unused by Pico Wireless)
@@ -35,7 +40,7 @@ HTTP_REQUEST_DELAY = const(60*60)
 # 443 as we are going via https
 HTTP_REQUEST_PORT = const(443)
 XML_ENERGY_EXCEPT_SOLAR_REQUEST_HOST = "api.bmreports.com"
-XML_ENERGY_EXCEPT_SOLAR_REQUEST_PATH = "/BMRS/FUELINSTHHCUR/v1?APIKey=po7f83ilmq2p223&ServiceType=XML"
+
 JSON_SOLAR_REQUEST_HOST = "api0.solar.sheffield.ac.uk"
 JSON_SOLAR_REQUEST_PATH = "/pvlive/api/v3/ggd/0"
 
@@ -61,37 +66,43 @@ totalEnergyUsage = 0.0
 energyPalette = [solarColourTuple, gasColourTuple, coalColourTuple, nuclearColourTuple, windColourTuple, hydroColourTuple, biomassColourTuple]
 energyDescriptors = ['Solar', 'Gas', 'Coal', 'Nuclear', 'Wind', 'Hydro', 'Biomass']
 energyUsages = [solarMW, gasMW, coalMW, nuclearMW, windMW, hydroMW, biomassMW]
-
-def calculateTotalEnergyUsage():
-    global energyUsages
-    global totalEnergyUsage
-    for currentEnergy in energyUsages:
-        totalEnergyUsage = totalEnergyUsage + currentEnergy
-
-calculateTotalEnergyUsage()
-print("Total energy: ", totalEnergyUsage)
-
 #create an empty array to hold the lengths of LED pixels for each of the energy usages
 lengthsInLEDPixels = []
 
-def calculateNumberOfPixelsForEachPowerSource():
-    global lengthsInLEDPixels
-    global energyUsages
-    global totalEnergyUsage
+def calculateTotalEnergyUsage():
+    global energyUsages, totalEnergyUsage, solarMW, gasMW, coalMW, nuclearMW, windMW, hydroMW, biomassMW
     
-    lengthsInLEDPixels = [] #make sure it's empty!
+    #make sure the energyUsages array is empty!
+    energyUsages.clear()
+    #make sure the totalEnergyUsage is 0
+    totalEnergyUsage = 0
+    
+    energyUsages = [solarMW, gasMW, coalMW, nuclearMW, windMW, hydroMW, biomassMW]
+    for currentEnergy in energyUsages:
+        totalEnergyUsage = totalEnergyUsage + currentEnergy
+    print("Total energy: ", totalEnergyUsage)
+
+def calculateNumberOfPixelsForEachPowerSource():
+    global lengthsInLEDPixels, energyUsages, totalEnergyUsage
+    
+    # make sure it's empty!
+    lengthsInLEDPixels.clear()
     
     for currentEnergy in energyUsages:
         currentEnergyRatio = currentEnergy / totalEnergyUsage
-        currentShareAsHeight = currentEnergyRatio * (NUM_LEDS-1)
-        #casting to integer ignores everyting after decimal point
-        lengthsInLEDPixels.append(int(currentShareAsHeight))
-        
-calculateNumberOfPixelsForEachPowerSource()
+        currentShareAsLength = currentEnergyRatio * (NUM_LEDS-1)
+        # casting to integer ignores everyting after decimal point
+        lengthsInLEDPixels.append(int(currentShareAsLength))
+    
+    print("energyUsages are: {}".format(energyUsages))
+    print("lengthsInLEDPixels are: {}".format(lengthsInLEDPixels))
 
 def drawEnergyMix():
-    global lengthsInLEDPixels
-    global energyPalette
+    global lengthsInLEDPixels, energyPalette
+    
+    calculateTotalEnergyUsage()
+    calculateNumberOfPixelsForEachPowerSource()
+    
     startingLEDOnStrip = 0
     currentListIndex = 0
 
@@ -99,12 +110,15 @@ def drawEnergyMix():
         redValue = energyPalette[currentListIndex][0]
         greenValue = energyPalette[currentListIndex][1]
         blueValue = energyPalette[currentListIndex][2]
+        
         for i in range(startingLEDOnStrip, startingLEDOnStrip+LEDLength):
             led_strip.set_rgb(i, redValue, greenValue, blueValue)
+        
         #increment starting LED pixel position and indexing variable
         startingLEDOnStrip = startingLEDOnStrip+LEDLength
         currentListIndex = currentListIndex+1
-        
+
+#just draw initially with the fake data to check the ratios look correct
 drawEnergyMix()
 
 ppwhttp.start_wifi()
@@ -115,38 +129,62 @@ my_ip = ppwhttp.get_ip_address()
 print("Local IP: {}.{}.{}.{}".format(*my_ip))
 
 def XMLEnergyExceptSolarHandler(head, body):
-#     if head["Status"] == "200 OK":
-# since the server doesn't return a Status header, and I guess it's safe to assume no status == OK
-        if xmltok is not None:
-            # Parse as XML
-            #print("Raw XML is: {}".format(body))
-            data = xmltok.tokenize(io.StringIO(body))
-#           color = xmltok.text_of(data, "field2")[1:]ˀ
-            whatIsThis = xmltok.text_of(data, "currentMW")
-            print("currentMW text of gives: {}".format(whatIsThis))
-        else:
-            print("Unable to parse API response!")
-            return
-#         r = int(color[0:2], 16)
-#         g = int(color[2:4], 16)
-#         b = int(color[4:6], 16)
-#         ppwhttp.set_led(r, g, b)
-#        print("Set LED to {} {} {}".format(r, g, b))
-        #print("XML is: {}".format(data))
+    global gasMW, coalMW, nuclearMW, windMW, pumpedStorageHydroMW, nonPumpedHydroMW, hydroMW, biomassMW
+    if xmltok is not None:
+        # if head["Status"] == "200 OK":
+        # since the server doesn't return a Status header, I guess it's safe to assume no status == OK
+        data = xmltok.tokenize(io.StringIO(body))
+        currentSolarMW = float(xmltok.text_of(data, "currentMW"))
+        gasMW = float(xmltok.text_of(data, "currentMW"))
+        print("gasMW is: {}".format(gasMW))
+        
+        unusedOCGTMW = float(xmltok.text_of(data, "currentMW"))
+        unusedOILMW = float(xmltok.text_of(data, "currentMW"))
+        
+        coalMW = float(xmltok.text_of(data, "currentMW"))
+        print("coalMW is: {}".format(coalMW))
+        
+        nuclearMW = float(xmltok.text_of(data, "currentMW"))
+        print("nuclearMW is: {}".format(nuclearMW))
+        
+        windMW = float(xmltok.text_of(data, "currentMW"))
+        print("windMW is: {}".format(windMW))
+        
+        pumpedStorageHydroMW = float(xmltok.text_of(data, "currentMW"))
+        print("pumpedStorageHydroMW is: {}".format(pumpedStorageHydroMW))
+        
+        nonPumpedHydroMW = float(xmltok.text_of(data, "currentMW"))
+        print("nonPumpedHydroMW is: {}".format(nonPumpedHydroMW))
+        
+        hydroMW = pumpedStorageHydroMW + nonPumpedHydroMW
+        print("hydroMW is: {}".format(hydroMW))
+        
+        unusedOTHERMW = float(xmltok.text_of(data, "currentMW"))
+        unusedINTFR = float(xmltok.text_of(data, "currentMW"))
+        unusedINTIRL = float(xmltok.text_of(data, "currentMW"))
+        unusedINTNED = float(xmltok.text_of(data, "currentMW"))
+        unusedINTEW = float(xmltok.text_of(data, "currentMW"))
+        
+        biomassMW = float(xmltok.text_of(data, "currentMW"))
+        print("biomassMW is: {}".format(biomassMW))
+        drawEnergyMix()
+    else:
+        print("Unable to parse API response!")
+        return
         
 def JSONSolarHandler(head, body):
+    global solarMW
 #     if head["Status"] == "200 OK":
 # since the server doesn't return a Status header, and I guess it's safe to assume no status == OK
-        # Parse as JSON
-        data = json.loads(body)
-        print("JSON is: {}".format(data))
-        solarMW = float(data["data"][0][3])
-        print("MW from Solar JSON is: {}".format(solarMW))
+    # Parse as JSON
+    data = json.loads(body)
+    print("JSON is: {}".format(data))
+    solarMW = float(data["data"][0][3])
+    print("solarMW is: {}".format(solarMW))
+    drawEnergyMix()
         
 
 while True:
-#     ppwhttp.http_request(HTTP_REQUEST_HOST, HTTP_REQUEST_PORT, HTTP_REQUEST_HOST, HTTP_REQUEST_PATH, handler)
-#def http_request(host_address, port, request_host, request_path, handler, timeout=5000, client_sock=None, connection_mode=TCP_MODE):
 # had to double timeout to 10,000 ms as the XML server is throttled/slow it seems
     ppwhttp.http_request(XML_ENERGY_EXCEPT_SOLAR_REQUEST_HOST, HTTP_REQUEST_PORT, XML_ENERGY_EXCEPT_SOLAR_REQUEST_HOST, XML_ENERGY_EXCEPT_SOLAR_REQUEST_PATH, XMLEnergyExceptSolarHandler, timeout=10000, connection_mode=ppwhttp.TLS_MODE)
     ppwhttp.http_request(JSON_SOLAR_REQUEST_HOST, HTTP_REQUEST_PORT, JSON_SOLAR_REQUEST_HOST, JSON_SOLAR_REQUEST_PATH, JSONSolarHandler, connection_mode=ppwhttp.TLS_MODE)
