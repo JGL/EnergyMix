@@ -17,6 +17,24 @@ except ImportError:
 TCP_CLOSED = const(0)
 TCP_LISTEN = const(1)
 
+TCP_MODE = const(0)
+UDP_MODE = const(1)
+TLS_MODE = const(2)
+UDP_MULTICAST_MODE = const(3)
+TLS_BEARSSL_MODE = const(4)
+
+TCP_STATE_CLOSED = const(0)
+TCP_STATE_LISTEN = const(1)
+TCP_STATE_SYN_SENT = const(2)
+TCP_STATE_SVN_RCVD = const(3)
+TCP_STATE_ESTABLISHED = const(4)
+TCP_STATE_FIN_WAIT_1 = const(5)
+TCP_STATE_FIN_WAIT_2 = const(6)
+TCP_STATE_CLOSE_WAIT = const(7)
+TCP_STATE_CLOSING = const(8)
+TCP_STATE_LAST_ACK = const(9)
+TCP_STATE_TIME_WAIT = const(10)
+
 CLOUDFLARE_DNS = (1, 1, 1, 1)
 GOOGLE_DNS = (8, 8, 8, 8)
 
@@ -95,31 +113,38 @@ def start_server(http_port=DEFAULT_HTTP_PORT, timeout=5000):
     return None
 
 
-def connect_to_server(host_address, port, client_sock, timeout=5000):
-    picowireless.client_start(host_address, port, client_sock, TCP_CLOSED)
+def connect_to_server(host_address, port, client_sock, timeout=5000, connection_mode=TCP_MODE):
+    if connection_mode in (TLS_MODE, TLS_BEARSSL_MODE):
+        print("Connecting to {1}:{0}...".format(port, host_address))
+        picowireless.client_start(host_address, (0, 0, 0, 0), port, client_sock, connection_mode)
+    else:
+        host_address = get_host_by_name(host_address)
+        print("Connecting to {1}.{2}.{3}.{4}:{0}...".format(port, *host_address))
+        picowireless.client_start(host_address, port, client_sock, connection_mode)
 
     t_start = time.ticks_ms()
 
     while time.ticks_ms() - t_start < timeout:
         state = picowireless.get_client_state(client_sock)
-        if state == 4:
+        if state == TCP_STATE_ESTABLISHED:
+            print("Connected!")
             return True
-        time.sleep(1.0)
+        if state == TCP_STATE_CLOSED:
+            print("Connection failed!")
+            return False
+        print(state)
+        time.sleep(0.5)
 
+    print("Connection timeout!")
     return False
 
 
-def http_request(host_address, port, request_host, request_path, handler, timeout=5000, client_sock=None):
+def http_request(host_address, port, request_host, request_path, handler, timeout=5000, client_sock=None, connection_mode=TCP_MODE):
     if client_sock is None:
         client_sock = get_socket()
 
-    host_address = get_host_by_name(host_address)
-
-    print("Connecting to {1}.{2}.{3}.{4}:{0}...".format(port, *host_address))
-    if not connect_to_server(host_address, port, client_sock):
-        print("Connection failed!")
+    if not connect_to_server(host_address, port, client_sock, connection_mode=connection_mode):
         return False
-    print("Connected!")
 
     http_request = """GET {} HTTP/1.1
 Host: {}
@@ -149,26 +174,69 @@ Connection: close
         data = picowireless.get_data_buf(client_sock)
         response += data
 
-    response = response.decode("utf-8")
-
-    head, body = response.split("\r\n\r\n", 1)
+    head, body = response.split(b"\r\n\r\n", 1)
+    head = head.decode("utf-8")
     dhead = {}
 
     for line in head.split("\r\n")[1:]:
         key, value = line.split(": ", 1)
         dhead[key] = value
 
-    # Fudge to handle JSON data type, which is prefixed with a content length.
-    # This ignores the charset, if specified, since we've already assumed utf-8 above!
-    # TODO maybe pay attention to Content-Type charset
-    if "Content-Type" in dhead and dhead["Content-Type"].startswith("application/json"):
-        length, body = body.split("\n", 1)
-        length = int(length, 16)
-        body = body[:length]
+    encoding = "iso-8869-1"
+    content_type = "application/octet-stream"
+
+    if "Content-Type" in dhead:
+        ctype = dhead["Content-Type"].split("; ")
+        content_type = ctype[0].lower()
+        for c in ctype:
+            if c.startswith("encoding="):
+                encoding = c[9:]
+
+    # Handle JSON content type, this is prefixed with a length
+    # which we'll parse and use to truncate the body
+    if content_type == "application/json":
+        if not body.startswith(b"{"):
+            length, body = body.split(b"\r\n", 1)
+            length = int(length, 16)
+            body = body[:length]
+
+    body = body.decode(encoding)
 
     handler(dhead, body)
 
     picowireless.client_stop(client_sock)
+
+
+def find_route(route, url, method, data):
+    if len(url) > 0:
+        for key, value in route.items():
+            if key == url[0]:
+                return find_route(route[url[0]], url[1:], method, data)
+
+            elif key.startswith("<") and key.endswith(">"):
+                key = key[1:-1]
+                if ":" in key:
+                    dtype, key = key.split(":")
+                else:
+                    dtype = "str"
+
+                if dtype == "int":
+                    try:
+                        data[key] = int(url[0])
+                    except ValueError:
+                        continue
+
+                else:
+                    data[key] = url[0]
+
+                return find_route(value, url[1:], method, data)
+
+        return None, None
+
+    if method in route:
+        return route[method], data
+
+    return None, None
 
 
 def handle_http_request(server_sock, timeout=5000):
@@ -211,16 +279,24 @@ def handle_http_request(server_sock, timeout=5000):
 
     response = None
 
+    data = {}
+
+    if url.startswith("/"):
+        url = url[1:]
+    url = url.split("/")
+    handler, data = find_route(routes, url, method, data)
+
     # Dispatch the request to the relevant route
-    if url in routes and method in routes[url] and callable(routes[url][method]):
+    if callable(handler):
         if method == "POST":
-            data = {}
             for var in body.split("&"):
                 key, value = var.split("=")
                 data[key] = value
-            response = routes[url][method](method, url, data)
+
+        if data == {}:
+            response = handler(method, url)
         else:
-            response = routes[url][method](method, url)
+            response = handler(method, url, data)
 
     if response is not None:
         response = "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\n\r\n".format(len(response)) + response
@@ -239,10 +315,20 @@ def route(url, methods="GET"):
     if type(methods) is str:
         methods = [methods]
 
+    if url.startswith("/"):
+        url = url[1:]
+
+    url = url.split("/")
+
     def decorate(handler):
+        route = routes
+        for part in url:
+            if part not in route:
+                route[part] = {}
+
+            route = route[part]
+
         for method in methods:
-            if url not in routes:
-                routes[url] = {}
-            routes[url][method] = handler
+            route[method] = handler
 
     return decorate
