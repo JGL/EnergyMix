@@ -136,3 +136,6 @@ dmypy.json
 
 # Ignore the file with the wifi name and password...
 secrets.py
+# Ingore VS code strangeness
+.vscode
+settings.json

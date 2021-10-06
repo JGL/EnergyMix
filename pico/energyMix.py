@@ -16,8 +16,8 @@ except ImportError:
 """
 This uses the Plasma WS2812 LED library to drive a string of LEDs alongside the built-in RGB LED.
 You should wire your LEDs to VBUS/GND and connect the data pin to pin 27 (unused by Pico Wireless).
+See https://github.com/pimoroni/pimoroni-pico/tree/main/micropython/modules/plasma for the API
 """
-
 NUM_LEDS = 96  # Number of connected LEDs
 LED_PIN = 27   # LED data pin (27 is unused by Pico Wireless)
 LED_PIO = 0    # Hardware PIO (0 or 1)
@@ -25,7 +25,7 @@ LED_SM = 0     # PIO State-Machine (0 to 3)
 
 led_strip = plasma.WS2812(NUM_LEDS, LED_PIO, LED_SM, LED_PIN)
 led_strip.start()
-#just lighting up whole strip for now
+#just lighting up whole strip purple for now
 for i in range(NUM_LEDS):
     led_strip.set_rgb(i, 255, 0, 255)
 
@@ -38,6 +38,74 @@ XML_ENERGY_EXCEPT_SOLAR_REQUEST_HOST = "api.bmreports.com"
 XML_ENERGY_EXCEPT_SOLAR_REQUEST_PATH = "/BMRS/FUELINSTHHCUR/v1?APIKey=po7f83ilmq2p223&ServiceType=XML"
 JSON_SOLAR_REQUEST_HOST = "api0.solar.sheffield.ac.uk"
 JSON_SOLAR_REQUEST_PATH = "/pvlive/api/v3/ggd/0"
+
+#put in some default data for the energy types in MW and their colours
+solarMW = 10.0
+solarColourTuple = (231, 222, 35)
+gasMW = 10.0
+gasColourTuple = (216, 123, 36)
+coalMW = 10.0
+coalColourTuple = (28, 24, 28)
+nuclearMW = 10.0
+nuclearColourTuple = (205, 36, 37)
+windMW = 10.0
+windColourTuple = (255, 255, 255)
+pumpedStorageHydroMW = 10.0
+nonPumpedHydroMW = 10.0
+hydroMW = pumpedStorageHydroMW + nonPumpedHydroMW
+hydroColourTuple = (30, 29, 174)
+biomassMW = 10.0
+biomassColourTuple = (29, 173, 35)
+totalEnergyUsage = 0.0
+
+energyPalette = [solarColourTuple, gasColourTuple, coalColourTuple, nuclearColourTuple, windColourTuple, hydroColourTuple, biomassColourTuple]
+energyDescriptors = ['Solar', 'Gas', 'Coal', 'Nuclear', 'Wind', 'Hydro', 'Biomass']
+energyUsages = [solarMW, gasMW, coalMW, nuclearMW, windMW, hydroMW, biomassMW]
+
+def calculateTotalEnergyUsage():
+    global energyUsages
+    global totalEnergyUsage
+    for currentEnergy in energyUsages:
+        totalEnergyUsage = totalEnergyUsage + currentEnergy
+
+calculateTotalEnergyUsage()
+print("Total energy: ", totalEnergyUsage)
+
+#create an empty array to hold the lengths of LED pixels for each of the energy usages
+lengthsInLEDPixels = []
+
+def calculateNumberOfPixelsForEachPowerSource():
+    global lengthsInLEDPixels
+    global energyUsages
+    global totalEnergyUsage
+    
+    lengthsInLEDPixels = [] #make sure it's empty!
+    
+    for currentEnergy in energyUsages:
+        currentEnergyRatio = currentEnergy / totalEnergyUsage
+        currentShareAsHeight = currentEnergyRatio * (NUM_LEDS-1)
+        #casting to integer ignores everyting after decimal point
+        lengthsInLEDPixels.append(int(currentShareAsHeight))
+        
+calculateNumberOfPixelsForEachPowerSource()
+
+def drawEnergyMix():
+    global lengthsInLEDPixels
+    global energyPalette
+    startingLEDOnStrip = 0
+    currentListIndex = 0
+
+    for LEDLength in lengthsInLEDPixels:
+        redValue = energyPalette[currentListIndex][0]
+        greenValue = energyPalette[currentListIndex][1]
+        blueValue = energyPalette[currentListIndex][2]
+        for i in range(startingLEDOnStrip, startingLEDOnStrip+LEDLength):
+            led_strip.set_rgb(i, redValue, greenValue, blueValue)
+        #increment starting LED pixel position and indexing variable
+        startingLEDOnStrip = startingLEDOnStrip+LEDLength
+        currentListIndex = currentListIndex+1
+        
+drawEnergyMix()
 
 ppwhttp.start_wifi()
 ppwhttp.set_dns(ppwhttp.GOOGLE_DNS)
