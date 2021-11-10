@@ -22,6 +22,10 @@ except ImportError:
 EnergyMix uses the Plasma WS2812 LED library to drive a string of LEDs alongside the built-in RGB LED.
 You should wire your LEDs to VBUS/GND and connect the data pin to pin 27 (unused by Pico Wireless).
 See https://github.com/pimoroni/pimoroni-pico/tree/main/micropython/modules/plasma for the API for the Plasma WS2812 LED library
+Using this strip:
+https://shop.pimoroni.com/products/neon-like-rgb-led-strip-with-diffuser-neopixel-ws2812-sk6812-compatible
+Neon-like RGB LED Strip with Diffuser (NeoPixel/WS2812/SK6812 compatible)
+For this example
 """
 NUM_LEDS = 96  # Number of connected LEDs
 LED_PIN = 27   # LED data pin (27 is unused by Pico Wireless)
